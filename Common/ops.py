@@ -156,21 +156,21 @@ def feature_extraction(inputs,
         l1_features = tf.concat([l1_features, l0_features], axis=-1)  # (12+24*2)+24=84
 
         l2_features = conv1d(l1_features, comp, 1,  # 24
-                             padding='VALID', scope='layer2_prep', is_training=is_training, bn=use_bn, ibn=use_ibn,
+                             padding='VALID', scope='layer2_prep', is_training=is_training, bn=use_bn,
                              bn_decay=bn_decay)
         l2_features, l2_idx = dense_conv(l2_features, growth_rate=growth_rate, n=dense_n, k=knn,
                                          scope="layer2", is_training=is_training, bn=use_bn, bn_decay=bn_decay)
         l2_features = tf.concat([l2_features, l1_features], axis=-1)  # 84+(24*2+12)=144
 
         l3_features = conv1d(l2_features, comp, 1,  # 48
-                             padding='VALID', scope='layer3_prep', is_training=is_training, bn=use_bn, ibn=use_ibn,
+                             padding='VALID', scope='layer3_prep', is_training=is_training, bn=use_bn,
                              bn_decay=bn_decay)  # 48
         l3_features, l3_idx = dense_conv(l3_features, growth_rate=growth_rate, n=dense_n, k=knn,
                                          scope="layer3", is_training=is_training, bn=use_bn, bn_decay=bn_decay)
         l3_features = tf.concat([l3_features, l2_features], axis=-1)  # 144+(24*2+12)=204
 
         l4_features = conv1d(l3_features, comp, 1,  # 48
-                             padding='VALID', scope='layer4_prep', is_training=is_training, bn=use_bn, ibn=use_ibn,
+                             padding='VALID', scope='layer4_prep', is_training=is_training, bn=use_bn,
                              bn_decay=bn_decay)  # 48
         l4_features, l3_idx = dense_conv(l4_features, growth_rate=growth_rate, n=dense_n, k=knn,
                                          scope="layer4", is_training=is_training, bn=use_bn, bn_decay=bn_decay)
@@ -366,6 +366,63 @@ def attention_unit(inputs, scope='attention_unit', is_training=True):
 
     return x
 
+def encoder(inputs, scope='encoder', is_training=True):
+    inputs = tf.expand_dims(inputs, 2)
+    f1 = edgeformer(inputs, scope='1', is_training=is_training, dims=64)
+    f2 = edgeformer(f1, scope='2', is_training=is_training, dims=64)
+    f3 = edgeformer(f2, scope='3', is_training=is_training, dims=128)
+    f4 = edgeformer(f3, scope='4', is_training=is_training, dims=256)
+    
+    feature = tf.expand_dims(tf.concat([f1, f2, f3, f4], axis=-1), 2)
+    
+    output = conv2d(feature, 512, [1, 1],
+                    padding='VALID', stride=[1, 1],
+                    bn=False, is_training=is_training,
+                    scope='conv_final', bn_decay=None, activation_fn=None)
+    
+    return output
+
+def edgeformer(inputs, scope='mhsa', is_training=True, dims=128, num_head=8):
+    with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
+        
+        q = EdgeConv(inputs, C=dims, k=16, scope='conv_q', is_training=is_training, bn=False, bn_decay=None, activation=None)
+        k = EdgeConv(inputs, C=dims, k=16, scope='conv_k', is_training=is_training, bn=False, bn_decay=None, activation=None)
+        v = EdgeConv(inputs, C=dims, k=16, scope='conv_v', is_training=is_training, bn=False, bn_decay=None, activation=None)
+        
+        indices = dims//num_head
+                
+        # attention unit
+        for i in range(num_head):
+            query = q[:,:,i*indices:(i+1)*indices-1]
+            key = k[:,:,i*indices:(i+1)*indices-1]
+            value = v[:,:,i*indices:(i+1)*indices-1]
+            
+            # 1. MatMul
+            matmul_qk = tf.matmul(query, key, transpose_b=True)
+
+            # 2. Scale
+            #dk = tf.cast(tf.shape(k)[-1], tf.float32)
+            #scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
+            scaled_attention_logits = matmul_qk
+
+            # 3. Mask (opt.)
+            #if mask is not None:
+            #    scaled_attention_logits += (mask * -1e9)
+
+            # 4. SoftMax      
+            attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
+
+            # 5. MatMul
+            output = tf.matmul(attention_weights, value)
+            
+            if i==0:
+                net = output
+            else:
+                net = tf.concat([net, output], axis=-1)
+        
+        output = EdgeConv(net, C=dims, k=8, scope='conv_o', is_training=is_training, bn=False, bn_decay=None, activation=tf.nn.relu)
+                
+    return output
 
 ##################################################################################
 # Other function
@@ -384,6 +441,115 @@ def instance_norm(net, train=True, weight_decay=0.00001):
     epsilon = 1e-3
     normalized = (net - mu) / tf.square(sigma_sq + epsilon)
     return scale * normalized + shift
+
+
+def _variable_on_cpu(name, shape, initializer, use_fp16=False):
+  """Helper to create a Variable stored on CPU memory.
+  Args:
+    name: name of the variable
+    shape: list of ints
+    initializer: initializer for Variable
+  Returns:
+    Variable Tensor
+  """
+  with tf.device("/cpu:0"):
+    dtype = tf.float16 if use_fp16 else tf.float32
+    var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+  return var
+
+
+def _variable_with_weight_decay(name, shape, stddev, wd, use_xavier=True):
+  """Helper to create an initialized Variable with weight decay.
+
+  Note that the Variable is initialized with a truncated normal distribution.
+  A weight decay is added only if one is specified.
+
+  Args:
+    name: name of the variable
+    shape: list of ints
+    stddev: standard deviation of a truncated Gaussian
+    wd: add L2Loss weight decay multiplied by this float. If None, weight
+        decay is not added for this Variable.
+    use_xavier: bool, whether to use xavier initializer
+
+  Returns:
+    Variable Tensor
+  """
+  if use_xavier:
+    initializer = tf.contrib.layers.xavier_initializer()
+  else:
+    initializer = tf.truncated_normal_initializer(stddev=stddev)
+  var = _variable_on_cpu(name, shape, initializer)
+  if wd is not None:
+    weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
+    tf.add_to_collection('losses', weight_decay)
+  return var
+
+
+def nnconv1d(inputs,
+           num_output_channels,
+           kernel_size=1,
+           scope="conv1d",
+           stride=1,
+           padding='VALID',
+           data_format='NHWC',
+           use_xavier=True,
+           stddev=1e-3,
+           weight_decay=None,
+           activation_fn=tf.nn.relu,
+           bn=False,
+           bn_decay=None,
+           is_training=None):
+  """ 1D convolution with non-linear operation.
+
+  Args:
+    inputs: 3-D tensor variable BxLxC
+    num_output_channels: int
+    kernel_size: int
+    scope: string
+    stride: int
+    padding: 'SAME' or 'VALID'
+    data_format: 'NHWC' or 'NCHW'
+    use_xavier: bool, use xavier_initializer if true
+    stddev: float, stddev for truncated_normal init
+    weight_decay: float
+    activation_fn: function
+    bn: bool, whether to use batch norm
+    bn_decay: float or float tensor variable in [0,1]
+    is_training: bool Tensor variable
+
+  Returns:
+    Variable tensor
+  """
+  with tf.variable_scope(scope) as sc:
+    assert(data_format=='NHWC' or data_format=='NCHW')
+    if data_format == 'NHWC':
+      num_in_channels = inputs.get_shape()[-1].value
+    elif data_format=='NCHW':
+      num_in_channels = inputs.get_shape()[1].value
+    kernel_shape = [kernel_size,
+                    num_in_channels, num_output_channels]
+    kernel = _variable_with_weight_decay('weights',
+                                         shape=kernel_shape,
+                                         use_xavier=use_xavier,
+                                         stddev=stddev,
+                                         wd=weight_decay)
+    outputs = tf.nn.conv1d(inputs, kernel,
+                           stride=stride,
+                           padding=padding,
+                           data_format=data_format)
+    biases = _variable_on_cpu('biases', [num_output_channels],
+                              tf.constant_initializer(0.0))
+    outputs = tf.nn.bias_add(outputs, biases, data_format=data_format)
+
+    if bn:
+      outputs = batch_norm_for_conv1d(outputs, is_training,
+                                      bn_decay=bn_decay, scope='bn',
+                                      data_format=data_format)
+
+    if activation_fn is not None:
+      outputs = activation_fn(outputs)
+    return outputs
 
 
 def conv1d(inputs,
@@ -435,6 +601,7 @@ def conv1d(inputs,
                                    bias_regularizer=tf.contrib.layers.l2_regularizer(
                                        weight_decay),
                                    use_bias=use_bias, reuse=None)
+                
         assert not (bn and ibn)
         if bn:
             outputs = tf.layers.batch_normalization(
@@ -451,7 +618,7 @@ def conv1d(inputs,
 
 def conv2d(inputs,
            num_output_channels,
-           kernel_size,
+           kernel_size=[1, 1],
            scope=None,
            stride=[1, 1],
            padding='SAME',
@@ -596,6 +763,47 @@ def dense_conv(feature, n=3, growth_rate=64, k=16, scope='dense_conv', **kwargs)
         return y, idx
 
 
+def nn_dense_conv(feature, n=3,growth_rate=64, k=16, scope='dense_conv',**kwargs):
+    with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
+        y, idx = get_edge_feature(feature, k=k, idx=None)  # [B N K 2*C]
+        for i in range(n):
+            if i == 0:
+                y = tf.concat([
+                    tf.nn.relu(conv2d(y, growth_rate, name='l%d' % i)),
+                    tf.tile(tf.expand_dims(feature, axis=2), [1, 1, k, 1])], axis=-1)
+            elif i == n-1:
+                y = tf.concat([
+                    conv2d(y, growth_rate, name='l%d' % i),
+                    y], axis=-1)
+            else:
+
+                y = tf.concat([
+                    tf.nn.relu(conv2d(y, growth_rate, name='l%d' % i)),
+                    y], axis=-1)
+        y = tf.reduce_max(y, axis=-2)
+        return y,idx
+
+def EdgeConv(inputs, C=64, k=16, scope=None, is_training=None, bn=False, bn_decay=None, activation=tf.nn.relu):
+  '''
+    EdgeConv layer:
+      Wang, Y, Yongbin S, Ziwei L, Sanjay S, Michael B, Justin S.
+      "Dynamic graph cnn for learning on point clouds."
+      arXiv:1801.07829 (2018).
+  '''
+
+  adj_matrix = pairwise_distance(inputs)
+  nn_idx = knn(adj_matrix, k=k)
+
+  edge_features = nn_get_edge_feature(inputs, nn_idx, k)
+  out = conv2d(edge_features, C,
+               bn=bn, is_training=is_training,
+               scope=scope, bn_decay=bn_decay,
+               activation_fn=activation)
+  vertex_features = tf.reduce_max(out, axis=-2)
+
+  return vertex_features
+
+
 def normalize_point_cloud(pc):
     """
     pc [N, P, 3]
@@ -668,3 +876,71 @@ def add_valid_summary(name, value):
     avg, update = tf.metrics.mean(value)
     tf.summary.scalar(name, avg, collections=['valid_summary'])
     return update
+
+def nn_get_edge_feature(point_cloud, nn_idx, k):
+  """Construct edge feature for each point
+  Args:
+    point_cloud: (batch_size, num_points, 1, num_dims)
+    nn_idx: (batch_size, num_points, k)
+    k: int
+
+  Returns:
+    edge features: (batch_size, num_points, k, num_dims)
+  """
+  og_batch_size = point_cloud.get_shape().as_list()[0]
+  point_cloud = tf.squeeze(point_cloud)
+  if og_batch_size == 1:
+    point_cloud = tf.expand_dims(point_cloud, 0)
+
+  point_cloud_central = point_cloud
+
+  point_cloud_shape = point_cloud.get_shape()
+  batch_size = point_cloud_shape[0].value
+  num_points = point_cloud_shape[1].value
+  num_dims = point_cloud_shape[2].value
+
+  idx_ = tf.range(batch_size) * num_points
+  idx_ = tf.reshape(idx_, [batch_size, 1, 1])
+
+  point_cloud_flat = tf.reshape(point_cloud, [-1, num_dims])
+  point_cloud_neighbors = tf.gather(point_cloud_flat, nn_idx+idx_)
+  point_cloud_central = tf.expand_dims(point_cloud_central, axis=-2)
+
+  point_cloud_central = tf.tile(point_cloud_central, [1, 1, k, 1])
+
+  edge_feature = tf.concat([point_cloud_central, point_cloud_neighbors-point_cloud_central], axis=-1)
+  return edge_feature
+
+def pairwise_distance(point_cloud):
+  """Compute pairwise distance of a point cloud.
+
+  Args:
+    point_cloud: tensor (batch_size, num_points, num_dims)
+
+  Returns:
+    pairwise distance: (batch_size, num_points, num_points)
+  """
+  og_batch_size = point_cloud.get_shape().as_list()[0]
+  point_cloud = tf.squeeze(point_cloud)
+  if og_batch_size == 1:
+    point_cloud = tf.expand_dims(point_cloud, 0)
+
+  point_cloud_transpose = tf.transpose(point_cloud, perm=[0, 2, 1])
+  point_cloud_inner = tf.matmul(point_cloud, point_cloud_transpose)
+  point_cloud_inner = -2*point_cloud_inner
+  point_cloud_square = tf.reduce_sum(tf.square(point_cloud), axis=-1, keep_dims=True)
+  point_cloud_square_tranpose = tf.transpose(point_cloud_square, perm=[0, 2, 1])
+  return point_cloud_square + point_cloud_inner + point_cloud_square_tranpose
+
+def knn(adj_matrix, k=20):
+  """Get KNN based on the pairwise distance.
+  Args:
+    pairwise distance: (batch_size, num_points, num_points)
+    k: int
+
+  Returns:
+    nearest neighbors: (batch_size, num_points, k)
+  """
+  neg_adj = -adj_matrix
+  _, nn_idx = tf.nn.top_k(neg_adj, k=k)
+  return nn_idx

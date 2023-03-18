@@ -265,3 +265,55 @@ class PUGCN(object):
         self.variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
         return outputs
 
+
+class EdgeTransformer(object):
+
+    def __init__(self, opts, is_training, name="Generator"):
+        self.opts = opts
+        self.is_training = is_training
+        self.name = name
+        self.reuse = False
+        self.num_point = self.opts.patch_num_point
+        self.up_ratio = self.opts.up_ratio
+        self.up_ratio_real = self.up_ratio + self.opts.more_up
+        self.out_num_point = int(self.num_point * self.up_ratio)
+
+    def __call__(self, inputs):
+        with tf.variable_scope(self.name, reuse=self.reuse):
+
+            features = ops.encoder(inputs, is_training=self.is_training)
+            
+            H = ops.up_unit(features, self.up_ratio,
+                            'duplicate',
+                            scope="up_block",
+                            is_training=self.is_training, bn_decay=None)
+            
+            H = ops.conv2d(H, 256, [1, 1],
+                               padding='VALID', stride=[1, 1],
+                               bn=False, is_training=self.is_training,
+                               scope='fc_layer1', bn_decay=None,
+                               activation_fn=tf.nn.leaky_relu
+                               )
+
+            coord = ops.conv2d(H, 32, [1, 1],
+                               padding='VALID', stride=[1, 1],
+                               bn=False, is_training=self.is_training,
+                               scope='fc_layer2', bn_decay=None,
+                               activation_fn=tf.nn.leaky_relu
+                               )
+
+            coord = ops.conv2d(coord, 3, [1, 1],
+                               padding='VALID', stride=[1, 1],
+                               bn=False, is_training=self.is_training,
+                               scope='fc_layer4', bn_decay=None,
+                               activation_fn=None, weight_decay=0.0)
+            outputs = tf.squeeze(coord, [2])
+
+            if self.up_ratio_real > self.up_ratio:
+                outputs = gather_point(outputs, farthest_point_sample(self.out_num_point, outputs))
+            outputs += tf.reshape(tf.tile(tf.expand_dims(inputs, 2), [1, 1, self.up_ratio, 1]),
+                                  [inputs.shape[0], self.num_point * self.up_ratio, -1])  # B, N, 4, 3
+
+        self.reuse = True
+        self.variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
+        return outputs

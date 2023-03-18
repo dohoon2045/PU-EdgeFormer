@@ -8,9 +8,9 @@
 #bash Anaconda3-2019.07-Linux-x86_64.sh
 
 # Step1: install pugcn environment
-#conda remove --name pugcn --all
-conda create -n pugcn python=3.6.8 cudatoolkit=10.0 cudnn numpy=1.16
-conda activate pugcn
+#conda remove --name puedgeformer --all
+conda create -n puedgeformer python=3.6.8 cudatoolkit=10.0 cudnn numpy=1.16
+conda activate puedgeformer
 pip install matplotlib tensorflow-gpu==1.13.1 open3d==0.9 sklearn Pillow gdown plyfile
 # please do not install tensorflow gpu by conda. It may effect the following compiling.
 

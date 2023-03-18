@@ -73,7 +73,7 @@ parser.add_argument('--fps', dest='random', action='store_false', default=True,
                     help='use random input, or farthest sample input(default)')
 
 # model
-parser.add_argument('--model', default='pugcn', help='model name: pugan, mpu, pugcn')
+parser.add_argument('--model', default='edgetransformer', help='model name: pugan, mpu, pugcn, edgetransformer')
 parser.add_argument('--up_ratio', type=int, default=4)
 parser.add_argument('--more_up', type=int, default=0)
 parser.add_argument('--block', default='inception',

@@ -1,132 +1,36 @@
-# PU-GCN: Point Cloud Upsampling using Graph Convolutional Networks (CVPR21')
-[CVPR21](https://openaccess.thecvf.com/content/CVPR2021/html/Qian_PU-GCN_Point_Cloud_Upsampling_Using_Graph_Convolutional_Networks_CVPR_2021_paper.html) | [Arxiv](https://arxiv.org/abs/1912.03264.pdf) | [project](https://www.deepgcns.org/app/pu-gcn) | [code](https://github.com/guochengqian/PU-GCN) | [PU1K data](https://drive.google.com/drive/folders/1k1AR_oklkupP8Ssw6gOrIve0CmXJaSH3?usp=sharing)
+# PU-EdgeFormer: Edge Transformer for Dense Prediction in Point Cloud Upsampling
 
-This is the official implementation for our CVPR 21' paper [PU-GCN: Point Cloud Upsampling using Graph Convolutional Networks](https://arxiv.org/abs/1912.03264.pdf). This repository supports training our PU-GCN, and previous methods [PU-Net](https://arxiv.org/abs/1801.06761), [MPU (3PU)](https://arxiv.org/abs/1811.11286), [PU-GAN](https://arxiv.org/abs/1907.10844). 
+by Dohoon Kim, Minwoo Shin, and Joonki Paik.
 
+This is the official implementation of PU-Edgeformer: Edge Transformer for Dense Prediction for Point Cloud Upsampling.
 
+This repository supports training our paper PU-EdgeFormer, and previous methods [PU-Net](https://github.com/yulequan/PU-Net), [MPU](https://github.com/yifita/3PU), [PU-GAN](https://github.com/liruihui/PU-GAN), [PU-GCN](https://github.com/guochengqian/PU-GCN).
 
-### Update
-* 2021/08/28: provide pretrained model. fix evaluation bug. add more tf_ops compilation instructions.
-
-  
-
-
-### Preparation
-
-1. Clone the repository:
-
-   ```shell
-   https://github.com/guochengqian/PU-GCN.git
-   cd PU-GCN
-   ```
-   
-2. install the environment
-   Once you have modified the path in `compile.sh` under `tf_ops`, you can simply install `pugcn` environment by:  
-   
-   ```bash
-    bash env_install.sh
-    conda activate pugcn
-   ```
-   
-   Note this repository is based on Tensorflow (1.13.1) and the TF operators from PointNet++.  You can check the `env_install.sh` for details how to install the environment.  In the second step, for compiling TF operators, please check `compile.sh` in `tf_ops` folder, one may have to manually change the path!!
-   
-3. Download PU1K dataset from [Google Drive](https://drive.google.com/file/d/1oTAx34YNbL6GDwHYL2qqvjmYtTVWcELg/view?usp=sharing)  
-    Link the data to `./data`:
-
-    ```bash
-    mkdir data
-    ln -s /path/to/PU1K ./data/
-    ```
-4. Optional. The original meshes of PU1K dataset is avaialble in [Goolge Drive](https://drive.google.com/file/d/1tnMjJUeh1e27mCRSNmICwGCQDl20mFae/view?usp=sharing)
+## Installation
+    git clone https://github.com/dohoon2045/PU-EdgeFormer.git
+    cd puedgeformer
+    bach env_install.sh
+    conda activate puedgeformer
     
-### Train
+## Dataset
+We use PU1K dataset for training and testing as provided by [PU-GCN](https://github.com/guochengqian/PU-GCN).
+Please refer to original repository for downloading the data.
 
-Train models. Our pretrained models are available [Google Drive](https://drive.google.com/file/d/1vusBIw7sd69gnyaeoWMiGaPHfkyHM5Qb/view?usp=sharing)
+You can also other dataset of h5 format such as provided by [PU-GAN](https://github.com/liruihui/PU-GAN), [PU-Net](https://github.com/yulequan/PU-Net).
 
--  PU-GCN
-    ```shell
-    python main.py --phase train --model pugcn --upsampler nodeshuffle --k 20 
-    ```
-
--  PU-Net
-    ```
-    python main.py --phase train --model punet --upsampler original  
-    ```
-
--  MPU
-    ```
-    python main.py --phase train --model mpu --upsampler duplicate 
-    ```
-
--  PU-GAN
-    ```
-    python main.py --phase train --model pugan --more_up 2 
-    ```
-
-
-
-### Evaluation
-
-1. Test on PU1K dataset
-   ```bash
-   bash test_pu1k_allmodels.sh # please modify this script and `test_pu1k.sh` if needed
-   ```
-
-5. Test on real-scanned dataset
-
-    ```bash
-    bash test_realscan_allmodels.sh
-    ```
-
-6. Visualization. 
-    check below. You have to modify the path inside. 
+## Training
+    python main.py --phase train --model puedgeformer --log_dir log/pu-edgeformer/
     
-    ```bash
-    python vis_benchmark.py
-    ```
+## Testing
+    python main.py --phase test --model puedgeformer --log_dir log/pu-edgeformer/ --data_dir ./data/PU1K/test/input_2048/input_2048/
     
-
-
-
+## Evaluation
+    python evaluate.py --gt ./data/PU1K/test/input_2048/gt_8192/ --pred evaluation_code/result/ --save_path log/pu-edgeformer/
+    
 ## Citation
-
-If PU-GCN and the repo are useful for your research, please consider citing:
-
-    @InProceedings{Qian_2021_CVPR,
-        author    = {Qian, Guocheng and Abualshour, Abdulellah and Li, Guohao and Thabet, Ali and Ghanem, Bernard},
-        title     = {PU-GCN: Point Cloud Upsampling Using Graph Convolutional Networks},
-        booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-        month     = {June},
-        year      = {2021},
-        pages     = {11683-11692}
-    }
+If you find PU-EdgeFormer is useful your research, please consider citing:
     
-    @article{Yu2018PUNetPC,
-      title={PU-Net: Point Cloud Upsampling Network},
-      author={Lequan Yu and Xianzhi Li and Chi-Wing Fu and D. Cohen-Or and P. Heng},
-      journal={2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-      year={2018},
-      pages={2790-2799}
-    }
     
-    @article{Wang2019PatchBasedP3,
-      title={Patch-Based Progressive 3D Point Set Upsampling},
-      author={Yifan Wang and Shihao Wu and Hui Huang and D. Cohen-Or and O. Sorkine-Hornung},
-      journal={2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-      year={2019},
-      pages={5951-5960}
-    }
-    
-    @inproceedings{li2019pugan,
-         title={PU-GAN: a Point Cloud Upsampling Adversarial Network},
-         author={Li, Ruihui and Li, Xianzhi and Fu, Chi-Wing and Cohen-Or, Daniel and Heng, Pheng-Ann},
-         booktitle = {{IEEE} International Conference on Computer Vision ({ICCV})},
-         year = {2019}
-     }
-
-
-​    
-### Acknowledgement
-This repo is heavily built on [PU-GAN code](https://github.com/liruihui/PU-GAN). We also borrow the architecture and evaluation codes from MPU and PU-Net. 
-
-
+## Acknowledgement
+This repo is heavily built based on [PU-GCN](https://github.com/guochengqian/PU-GCN) and [PU-GAN](https://github.com/liruihui/PU-GAN) code.
+We also borrow the architecture and evaluation codes from [PU-Net](https://github.com/yulequan/PU-Net) and [MPU](https://github.com/yifita/3PU).
