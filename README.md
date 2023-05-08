@@ -2,7 +2,7 @@
 
 by Dohoon Kim, Minwoo Shin, and Joonki Paik.
 
-This is the official implementation of PU-Edgeformer: Edge Transformer for Dense Prediction for Point Cloud Upsampling.
+This is the official implementation of [PU-Edgeformer: Edge Transformer for Dense Prediction for Point Cloud Upsampling](https://arxiv.org/abs/2305.01148).
 
 This repository supports training our paper PU-EdgeFormer, and previous methods [PU-Net](https://github.com/yulequan/PU-Net), [MPU](https://github.com/yifita/3PU), [PU-GAN](https://github.com/liruihui/PU-GAN), [PU-GCN](https://github.com/guochengqian/PU-GCN).
 
