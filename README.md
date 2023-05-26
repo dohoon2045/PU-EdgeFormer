@@ -29,7 +29,12 @@ You can also other dataset of h5 format such as provided by [PU-GAN](https://git
     
 ## Citation
 If you find PU-EdgeFormer is useful your research, please consider citing:
-    
+    @article{kim2023pu,
+    title={PU-EdgeFormer: Edge Transformer for Dense Prediction in Point Cloud Upsampling},
+    author={Kim, Dohoon and Shin, Minwoo and Paik, Joonki},
+    journal={arXiv preprint arXiv:2305.01148},
+    year={2023}
+    }
     
 ## Acknowledgement
 This repo is heavily built based on [PU-GCN](https://github.com/guochengqian/PU-GCN) and [PU-GAN](https://github.com/liruihui/PU-GAN) code.
