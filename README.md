@@ -16,7 +16,7 @@ This repository supports training our paper PU-EdgeFormer, and previous methods 
 We use PU1K dataset for training and testing as provided by [PU-GCN](https://github.com/guochengqian/PU-GCN).
 Please refer to original repository for downloading the data.
 
-You can also other dataset of h5 format such as provided by [PU-GAN](https://github.com/liruihui/PU-GAN), [PU-Net](https://github.com/yulequan/PU-Net).
+You can also use other dataset of h5 format such as provided by [PU-GAN](https://github.com/liruihui/PU-GAN), [PU-Net](https://github.com/yulequan/PU-Net).
 
 ## Training
     python main.py --phase train --model puedgeformer --log_dir log/pu-edgeformer/
